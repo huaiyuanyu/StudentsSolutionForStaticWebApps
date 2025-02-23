@@ -1,7 +1,57 @@
 ﻿@page "/"
+@inject HttpClient Http
+@inject NavigationManager NavManager
 
-<PageTitle>Home</PageTitle>
+<div class="grid" tabindex="-1">
+    <QuickGrid ItemsProvider="@studentsProvider" Virtualize="true" Pagination="@pagination">
+        <PropertyColumn Title="ID" Property="@(c => c.StudentId)" Sortable="true" />
+        <TemplateColumn Title="Name" SortBy="@sortByName">
+          <div class="flex items-center">
+            <nobr>
+              @context.FirstName @context.LastName
+            </nobr>
+          </div>
+        </TemplateColumn>
+        <PropertyColumn Property="@(c => c.School)" Sortable="true" />
+    </QuickGrid>
+</div>
 
-<h1>Hello, world!</h1>
+<Paginator State="@pagination" />
 
-Welcome to your new app.
+@code {
+    GridItemsProvider<Student>? studentsProvider;
+    int numResults;
+
+    private PaginationState pagination = new PaginationState {ItemsPerPage = 10};
+
+    GridSort<Student> sortByName = GridSort<Student>
+      .ByAscending(_ => _.FirstName).ThenAscending(_ => _.LastName);
+    protected override async Task OnInitializedAsync()
+    {
+        // Define the GridItemsProvider. Its job is to convert QuickGrid's GridItemsProviderRequest into a query against
+        // an arbitrary data soure. In this example, we need to translate query parameters into the particular URL format
+        // supported by the external JSON API. It's only possible to perform whatever sorting/filtering/etc is supported
+        // by the external API.
+        studentsProvider = async req =>
+      {
+          
+          var url = NavManager.GetUriWithQueryParameters($"{Constants.BASE_URL}api/students", new Dictionary<string, object?>
+          {
+              { "skip", req.StartIndex },
+              { "limit", req.Count },
+          });
+
+          var studentList = await Http.GetFromJsonAsync<List<Student>>(url, req.CancellationToken);
+
+          // Wrap the list inside StudentQueryResult
+          var response = new StudentQueryResult { Results = studentList ?? new List<Student>() };
+
+          return GridItemsProviderResult.From(
+              items: response.Results,
+              totalItemCount: response.Total);
+      };
+
+      var studentList = await Http.GetFromJsonAsync<List<Student>>($"{Constants.BASE_URL}api/students");
+      numResults = studentList?.Count ?? 0;
+    }
+}
